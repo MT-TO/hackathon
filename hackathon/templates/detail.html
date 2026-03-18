@@ -23,7 +23,7 @@
       <a class="detail-image-wrap" href="{{ url_for('original_asset', relative_path=record.relative_path) }}" target="_blank" rel="noreferrer">
         <img
           class="detail-image"
-          src="{{ url_for('image_asset', variant='preview', relative_path=record.relative_path) }}"
+          src="{{ url_for('image_asset', variant='preview', relative_path=record.relative_path, render=variant_settings.preview_cache_key) }}"
           alt="{{ record.filename }}"
         />
       </a>
@@ -42,6 +42,18 @@
           <div>
             <dt>Original UHD</dt>
             <dd><a href="{{ url_for('original_asset', relative_path=record.relative_path) }}" target="_blank" rel="noreferrer">Ouvrir le fichier source</a></dd>
+          </div>
+          <div>
+            <dt>Aperçu en cache</dt>
+            <dd>{{ variant_settings.preview_width }} x {{ variant_settings.preview_height }} px</dd>
+          </div>
+          <div>
+            <dt>Vignette en cache</dt>
+            <dd>{{ variant_settings.thumb_width }} x {{ variant_settings.thumb_height }} px</dd>
+          </div>
+          <div>
+            <dt>Qualité JPEG</dt>
+            <dd>{{ variant_settings.quality }}</dd>
           </div>
         </dl>
 

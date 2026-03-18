@@ -6,13 +6,13 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 VENV_SITE_PACKAGES = Path("/Users/mt/venv/lib/python3.14/site-packages")
 if VENV_SITE_PACKAGES.exists():
     sys.path.insert(0, str(VENV_SITE_PACKAGES))
 
-from flask import Flask, abort, flash, redirect, render_template, request, send_file, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
 from PIL import Image
 
 
@@ -22,7 +22,10 @@ CACHE_ROOT = BASE_DIR / ".cache"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 PREVIEW_SIZE = (800, 600)
 THUMB_SIZE = (160, 120)
+JPEG_QUALITY = 88
 CACHE_TTL_SECONDS = 2
+SIZE_LIMITS = (60, 4000)
+QUALITY_LIMITS = (20, 100)
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,46 @@ class ImageRecord:
     directory: str
     filename: str
     tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VariantSettings:
+    thumb_width: int = THUMB_SIZE[0]
+    thumb_height: int = THUMB_SIZE[1]
+    preview_width: int = PREVIEW_SIZE[0]
+    preview_height: int = PREVIEW_SIZE[1]
+    quality: int = JPEG_QUALITY
+
+    @property
+    def thumb_size(self) -> tuple[int, int]:
+        return (self.thumb_width, self.thumb_height)
+
+    @property
+    def preview_size(self) -> tuple[int, int]:
+        return (self.preview_width, self.preview_height)
+
+    @property
+    def thumb_cache_key(self) -> str:
+        return self._cache_key(self.thumb_size)
+
+    @property
+    def preview_cache_key(self) -> str:
+        return self._cache_key(self.preview_size)
+
+    def cache_key_for(self, variant: str) -> str:
+        return self.preview_cache_key if variant == "preview" else self.thumb_cache_key
+
+    def to_session_payload(self) -> dict[str, int]:
+        return {
+            "thumb_width": self.thumb_width,
+            "thumb_height": self.thumb_height,
+            "preview_width": self.preview_width,
+            "preview_height": self.preview_height,
+            "quality": self.quality,
+        }
+
+    def _cache_key(self, size: tuple[int, int]) -> str:
+        return f"{size[0]}x{size[1]}_q{self.quality}"
 
 
 class PhotoLibrary:
@@ -127,17 +170,17 @@ class PhotoLibrary:
     def count_untagged(self, directory: str = "") -> int:
         return sum(1 for record in self.filter_images(directory=directory) if not record.tags)
 
-    def ensure_variant(self, relative_path: str, variant: str) -> Path:
+    def ensure_variant(self, relative_path: str, variant: str, settings: VariantSettings) -> Path:
         source = self.images_root / self._clean_relative_path(relative_path)
         if not source.exists():
             raise FileNotFoundError(relative_path)
 
         target_root, size = (
-            (self.previews_root, PREVIEW_SIZE)
+            (self.previews_root, settings.preview_size)
             if variant == "preview"
-            else (self.thumbs_root, THUMB_SIZE)
+            else (self.thumbs_root, settings.thumb_size)
         )
-        target = (target_root / self._clean_relative_path(relative_path)).with_suffix(".jpg")
+        target = (target_root / settings.cache_key_for(variant) / self._clean_relative_path(relative_path)).with_suffix(".jpg")
         target.parent.mkdir(parents=True, exist_ok=True)
 
         if target.exists() and target.stat().st_mtime_ns >= source.stat().st_mtime_ns:
@@ -146,7 +189,7 @@ class PhotoLibrary:
         with Image.open(source) as image:
             converted = image.convert("RGB")
             converted.thumbnail(size)
-            converted.save(target, format="JPEG", quality=88, optimize=True)
+            converted.save(target, format="JPEG", quality=settings.quality, optimize=True)
         return target
 
     def add_tags(self, relative_paths: Iterable[str], raw_tags: str) -> int:
@@ -298,10 +341,17 @@ class PhotoLibrary:
 
     def _remove_cached_variants(self, relative_path: str) -> None:
         clean_relative_path = self._clean_relative_path(relative_path)
+        relative_variant = Path(clean_relative_path).with_suffix(".jpg")
         for root in (self.previews_root, self.thumbs_root):
-            candidate = (root / clean_relative_path).with_suffix(".jpg")
-            if candidate.exists():
-                candidate.unlink()
+            legacy_candidate = root / relative_variant
+            if legacy_candidate.exists():
+                legacy_candidate.unlink()
+            for settings_dir in root.iterdir():
+                if not settings_dir.is_dir():
+                    continue
+                candidate = settings_dir / relative_variant
+                if candidate.exists():
+                    candidate.unlink()
 
     @staticmethod
     def _parse_tags(raw_tags: str) -> set[str]:
@@ -394,6 +444,7 @@ def inject_helpers() -> dict[str, object]:
     return {
         "breadcrumb_parts": breadcrumb_parts,
         "directory_label": directory_label,
+        "variant_settings": current_variant_settings(),
     }
 
 
@@ -445,7 +496,7 @@ def image_asset(variant: str, relative_path: str):
     if variant not in {"preview", "thumb"}:
         abort(404)
     try:
-        path = library.ensure_variant(relative_path, variant)
+        path = library.ensure_variant(relative_path, variant, current_variant_settings())
     except (FileNotFoundError, ValueError):
         abort(404)
     return send_file(path, mimetype="image/jpeg", conditional=True)
@@ -483,6 +534,24 @@ def import_images() -> object:
         flash("Aucune image valide importée.", "error")
     else:
         flash(f"{imported} image(s) importée(s) depuis votre ordinateur.", "success")
+    return redirect(_redirect_target())
+
+
+@app.post("/actions/render-settings")
+def update_render_settings() -> object:
+    if request.form.get("mode") == "reset":
+        session.pop("variant_settings", None)
+        flash("Réglages d'image réinitialisés.", "success")
+        return redirect(_redirect_target())
+
+    try:
+        settings = parse_variant_settings(request.form)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(_redirect_target())
+
+    session["variant_settings"] = settings.to_session_payload()
+    flash("Réglages d'image mis à jour.", "success")
     return redirect(_redirect_target())
 
 
@@ -551,6 +620,80 @@ def breadcrumb_parts(directory: str) -> list[tuple[str, str]]:
 
 def directory_label(directory: str) -> str:
     return directory or "Images"
+
+
+def current_variant_settings() -> VariantSettings:
+    stored = session.get("variant_settings", {})
+    if not isinstance(stored, dict):
+        return VariantSettings()
+
+    return VariantSettings(
+        thumb_width=coerce_int_setting(stored, "thumb_width", THUMB_SIZE[0]),
+        thumb_height=coerce_int_setting(stored, "thumb_height", THUMB_SIZE[1]),
+        preview_width=coerce_int_setting(stored, "preview_width", PREVIEW_SIZE[0]),
+        preview_height=coerce_int_setting(stored, "preview_height", PREVIEW_SIZE[1]),
+        quality=coerce_int_setting(
+            stored,
+            "quality",
+            JPEG_QUALITY,
+            minimum=QUALITY_LIMITS[0],
+            maximum=QUALITY_LIMITS[1],
+        ),
+    )
+
+
+def parse_variant_settings(payload: Mapping[str, object]) -> VariantSettings:
+    return VariantSettings(
+        thumb_width=parse_required_int_setting(payload, "thumb_width", "largeur vignette"),
+        thumb_height=parse_required_int_setting(payload, "thumb_height", "hauteur vignette"),
+        preview_width=parse_required_int_setting(payload, "preview_width", "largeur aperçu"),
+        preview_height=parse_required_int_setting(payload, "preview_height", "hauteur aperçu"),
+        quality=parse_required_int_setting(
+            payload,
+            "quality",
+            "qualité JPEG",
+            minimum=QUALITY_LIMITS[0],
+            maximum=QUALITY_LIMITS[1],
+        ),
+    )
+
+
+def parse_required_int_setting(
+    payload: Mapping[str, object],
+    key: str,
+    label: str,
+    minimum: int = SIZE_LIMITS[0],
+    maximum: int = SIZE_LIMITS[1],
+) -> int:
+    raw_value = str(payload.get(key, "")).strip()
+    if not raw_value:
+        raise ValueError(f"Le champ {label} est obligatoire.")
+
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise ValueError(f"Le champ {label} doit être un entier.") from error
+
+    if not minimum <= value <= maximum:
+        raise ValueError(f"Le champ {label} doit être compris entre {minimum} et {maximum}.")
+    return value
+
+
+def coerce_int_setting(
+    payload: Mapping[str, object],
+    key: str,
+    default: int,
+    minimum: int = SIZE_LIMITS[0],
+    maximum: int = SIZE_LIMITS[1],
+) -> int:
+    raw_value = payload.get(key, default)
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    if not minimum <= value <= maximum:
+        return default
+    return value
 
 
 if __name__ == "__main__":

@@ -89,6 +89,46 @@
 
       <div class="create-folder-box">
         <div class="tree-heading">
+          <h3>Rendu des images</h3>
+        </div>
+        <form class="stack-form" method="post" action="{{ url_for('update_render_settings') }}">
+          <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}" />
+
+          <div class="render-settings-grid">
+            <label>
+              <span>Vignette largeur max</span>
+              <input type="number" name="thumb_width" min="60" max="4000" value="{{ variant_settings.thumb_width }}" required />
+            </label>
+            <label>
+              <span>Vignette hauteur max</span>
+              <input type="number" name="thumb_height" min="60" max="4000" value="{{ variant_settings.thumb_height }}" required />
+            </label>
+            <label>
+              <span>Aperçu largeur max</span>
+              <input type="number" name="preview_width" min="60" max="4000" value="{{ variant_settings.preview_width }}" required />
+            </label>
+            <label>
+              <span>Aperçu hauteur max</span>
+              <input type="number" name="preview_height" min="60" max="4000" value="{{ variant_settings.preview_height }}" required />
+            </label>
+          </div>
+
+          <label>
+            <span>Qualité JPEG</span>
+            <input type="number" name="quality" min="20" max="100" value="{{ variant_settings.quality }}" required />
+          </label>
+
+          <p class="muted">Les originaux restent intacts. Seules les variantes mises en cache changent.</p>
+
+          <div class="inline-actions">
+            <button class="button button-primary" type="submit">Appliquer</button>
+            <button class="button button-light" type="submit" name="mode" value="reset">Réinitialiser</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="create-folder-box">
+        <div class="tree-heading">
           <h3>Importer depuis le PC</h3>
         </div>
         <form class="stack-form" method="post" action="{{ url_for('import_images') }}" enctype="multipart/form-data">
@@ -197,7 +237,7 @@
 
                 <a href="{{ url_for('image_detail', relative_path=record.relative_path, from=return_query) }}" class="card-media">
                   <img
-                    src="{{ url_for('image_asset', variant='thumb', relative_path=record.relative_path) }}"
+                    src="{{ url_for('image_asset', variant='thumb', relative_path=record.relative_path, render=variant_settings.thumb_cache_key) }}"
                     alt="{{ record.filename }}"
                     loading="lazy"
                   />
