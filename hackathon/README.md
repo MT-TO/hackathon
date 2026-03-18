@@ -1,12 +1,13 @@
-# Photo Desk
+# Photags
 
 Solution complète du sujet `hackathon-2026.pdf` sous forme d'application web locale en Python.
 
 ## Fonctionnalités couvertes
 
 - navigation dans `Images/` avec profondeur maximale de deux niveaux
-- génération et mise en cache des miniatures `800x600 max`
-- génération et mise en cache des vignettes `160x120 max`
+- génération et mise en cache des miniatures avec taille réglable
+- génération et mise en cache des vignettes avec taille réglable
+- réglage de la qualité JPEG des variantes mises en cache
 - affichage `vignette -> miniature -> original UHD`
 - ajout et retrait de tags par lots
 - création de sous-répertoires

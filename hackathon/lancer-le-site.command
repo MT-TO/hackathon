@@ -3,7 +3,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-echo "Demarrage de Photo Desk..."
+echo "Demarrage de Photags..."
 echo "Projet: $SCRIPT_DIR"
 echo ""
 
