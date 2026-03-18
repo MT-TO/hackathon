@@ -16,7 +16,9 @@
   <body>
     <header class="site-header">
       <a class="brand" href="{{ url_for('index') }}">
-        <span class="brand-mark">PT</span>
+        <span class="brand-mark" aria-hidden="true">
+          <img src="{{ url_for('static', filename='photags-logo.svg') }}" alt="" />
+        </span>
         <span>
           <strong>Photags</strong>
           <small>Tri local pour l'agence photo</small>
