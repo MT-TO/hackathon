@@ -430,8 +430,6 @@ input[type="file"] {
 }
 
 .filter-drawer {
-  position: sticky;
-  top: 1rem;
   z-index: 10;
   display: grid;
   gap: 0.9rem;
@@ -922,9 +920,6 @@ input[type="file"] {
     align-items: stretch;
   }
 
-  .filter-drawer {
-    top: 0.7rem;
-  }
 }
 
 @media (max-width: 720px) {
