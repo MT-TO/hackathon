@@ -1,4 +1,4 @@
-# Photo Desk
+# Photags
 
 Solution complète du sujet `hackathon-2026.pdf` sous forme d'application web locale en Python.
 
