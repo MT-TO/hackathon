@@ -615,17 +615,35 @@ input[type="file"] {
   background: var(--panel-soft);
 }
 
+.detail-exif {
+  padding: 0.95rem;
+  border-radius: 18px;
+  background: var(--panel-soft);
+}
+
 .detail-meta dl {
   margin: 0.9rem 0;
+}
+
+.detail-exif-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
 }
 
 .detail-meta dt {
   font-weight: 700;
 }
 
-.detail-meta dd {
+.detail-meta dd,
+.detail-exif dd {
   margin: 0.2rem 0 0;
   color: var(--muted);
+}
+
+.detail-exif dt {
+  font-weight: 700;
 }
 
 @media (max-width: 1080px) {
@@ -641,6 +659,10 @@ input[type="file"] {
   }
 
   .render-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-exif-grid {
     grid-template-columns: 1fr;
   }
 

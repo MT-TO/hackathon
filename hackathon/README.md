@@ -12,6 +12,8 @@ Solution complète du sujet `hackathon-2026.pdf` sous forme d'application web lo
 - ajout et retrait de tags par lots
 - mise en favoris avec filtre dédié
 - rotation des images par pas de 90° dans l'interface
+- tag automatique local sur une image via Vision macOS
+- lecture des données EXIF sur la fiche image quand elles sont disponibles
 - création de sous-répertoires
 - déplacement d'images par lots
 - filtrage par dossier, par tag, et affichage des images sans tag

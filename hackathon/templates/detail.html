@@ -99,5 +99,41 @@
         <p class="muted">Workflow demandé par le sujet : vignette → miniature → original. La rotation n'altère pas les originaux.</p>
       </aside>
     </div>
+
+    <section class="detail-exif">
+      <div class="panel-head">
+        <div>
+          <h3>Tag automatique</h3>
+          <p class="muted">Analyse locale de l'image pour proposer un tag selon le contenu visible.</p>
+        </div>
+        <form class="detail-inline-form" method="post" action="{{ url_for('auto_tag_image') }}">
+          <input type="hidden" name="relative_path" value="{{ record.relative_path }}" />
+          <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}" />
+          <button class="button button-primary" type="submit">Analyser et taguer</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="detail-exif">
+      <div class="panel-head">
+        <div>
+          <h3>Données EXIF</h3>
+          <p class="muted">Métadonnées récupérées depuis le fichier source quand elles existent.</p>
+        </div>
+      </div>
+
+      {% if exif_entries %}
+        <dl class="detail-exif-grid">
+          {% for label, value in exif_entries %}
+            <div>
+              <dt>{{ label }}</dt>
+              <dd>{{ value }}</dd>
+            </div>
+          {% endfor %}
+        </dl>
+      {% else %}
+        <p class="muted">Aucune donnée EXIF lisible pour cette image.</p>
+      {% endif %}
+    </section>
   </section>
 {% endblock %}

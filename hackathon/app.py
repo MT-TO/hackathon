@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ if VENV_SITE_PACKAGES.exists():
     sys.path.insert(0, str(VENV_SITE_PACKAGES))
 
 from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
-from PIL import Image
+from PIL import ExifTags, Image
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,6 +27,8 @@ JPEG_QUALITY = 88
 CACHE_TTL_SECONDS = 2
 SIZE_LIMITS = (60, 4000)
 QUALITY_LIMITS = (20, 100)
+AUTO_TAG_MIN_CONFIDENCE = 0.35
+AUTO_TAG_MAX_RESULTS = 5
 
 
 @dataclass(frozen=True)
@@ -222,6 +225,39 @@ class PhotoLibrary:
             converted.save(target, format="JPEG", quality=settings.quality, optimize=True)
         return target
 
+    def suggest_tags_from_image(self, relative_path: str, limit: int = AUTO_TAG_MAX_RESULTS) -> list[tuple[str, float]]:
+        clean_relative_path = self._clean_relative_path(relative_path)
+        source = self.images_root / clean_relative_path
+        if not source.exists():
+            raise FileNotFoundError(relative_path)
+
+        raw_suggestions = self._classify_with_macos_vision(source)
+        suggestions: list[tuple[str, float]] = []
+        seen: set[str] = set()
+
+        for label, confidence in raw_suggestions:
+            normalized = self._normalize_suggested_tag(label)
+            if not normalized or normalized in seen:
+                continue
+            suggestions.append((normalized, confidence))
+            seen.add(normalized)
+            if len(suggestions) >= limit:
+                break
+
+        return suggestions
+
+    def add_automatic_tag(self, relative_path: str) -> tuple[str, float, list[tuple[str, float]], bool]:
+        suggestions = self.suggest_tags_from_image(relative_path)
+        if not suggestions:
+            raise ValueError("Aucun tag automatique exploitable n'a été trouvé.")
+
+        tag, confidence = suggestions[0]
+        if confidence < AUTO_TAG_MIN_CONFIDENCE:
+            raise ValueError("La détection automatique n'est pas assez fiable pour proposer un tag.")
+
+        updated = self.add_tags([relative_path], tag)
+        return tag, confidence, suggestions, bool(updated)
+
     def add_tags(self, relative_paths: Iterable[str], raw_tags: str) -> int:
         tags = self._parse_tags(raw_tags)
         if not tags:
@@ -413,6 +449,34 @@ class PhotoLibrary:
                 return record
         return None
 
+    def get_exif_data(self, relative_path: str) -> list[tuple[str, str]]:
+        clean_relative_path = self._clean_relative_path(relative_path)
+        source = self.images_root / clean_relative_path
+        if not source.exists():
+            raise FileNotFoundError(relative_path)
+
+        with Image.open(source) as image:
+            exif = image.getexif()
+            if not exif:
+                return []
+
+            entries: list[tuple[str, str]] = []
+            for tag_id, raw_value in sorted(
+                exif.items(),
+                key=lambda item: str(ExifTags.TAGS.get(item[0], item[0])).lower(),
+            ):
+                label = str(ExifTags.TAGS.get(tag_id, f"Tag {tag_id}"))
+                if label == "MakerNote":
+                    continue
+                formatted_value = self._format_exif_value(raw_value)
+                if formatted_value:
+                    entries.append((label, formatted_value))
+
+            gps_entries = self._extract_gps_exif(exif)
+            if gps_entries:
+                entries.extend(gps_entries)
+            return entries
+
     def invalidate_index(self) -> None:
         self._last_scan_at = 0.0
 
@@ -463,6 +527,137 @@ class PhotoLibrary:
                 candidate = settings_dir / relative_variant
                 if candidate.exists():
                     candidate.unlink()
+
+    @staticmethod
+    def _classify_with_macos_vision(source: Path) -> list[tuple[str, float]]:
+        swift_script = """
+import CoreGraphics
+import Foundation
+import ImageIO
+import Vision
+
+let path = {path}
+let limit = {limit}
+let url = URL(fileURLWithPath: path) as CFURL
+guard let source = CGImageSourceCreateWithURL(url, nil) else {{
+    fputs("image-source-error\\n", stderr)
+    exit(3)
+}}
+guard let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {{
+    fputs("image-decode-error\\n", stderr)
+    exit(4)
+}}
+
+let request = VNClassifyImageRequest()
+let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+try handler.perform([request])
+
+let results = request.results?.prefix(limit).map {{ observation in
+    ["identifier": observation.identifier, "confidence": observation.confidence]
+}} ?? []
+
+let data = try JSONSerialization.data(withJSONObject: results, options: [])
+print(String(data: data, encoding: .utf8) ?? "[]")
+""".format(path=json.dumps(str(source)), limit=AUTO_TAG_MAX_RESULTS)
+        module_cache_root = CACHE_ROOT / "vision-module-cache"
+        module_cache_root.mkdir(parents=True, exist_ok=True)
+        environment = dict(os.environ)
+        environment["CLANG_MODULE_CACHE_PATH"] = str(module_cache_root)
+        environment["SWIFT_MODULE_CACHE_PATH"] = str(module_cache_root)
+        environment.setdefault("HOME", str(Path.home()))
+
+        try:
+            result = subprocess.run(
+                ["swift", "-e", swift_script],
+                check=True,
+                capture_output=True,
+                env=environment,
+                text=True,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError("Swift n'est pas disponible sur cette machine.") from error
+        except subprocess.CalledProcessError as error:
+            stderr = (error.stderr or "").strip()
+            raise RuntimeError(
+                f"Analyse automatique impossible via Vision macOS{f' ({stderr})' if stderr else '.'}"
+            ) from error
+
+        try:
+            payload = json.loads((result.stdout or "").strip() or "[]")
+        except json.JSONDecodeError as error:
+            raise RuntimeError("Réponse invalide du moteur de classification locale.") from error
+
+        suggestions: list[tuple[str, float]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("identifier", "")).strip()
+            try:
+                confidence = float(item.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+            if label:
+                suggestions.append((label, confidence))
+        return suggestions
+
+    @staticmethod
+    def _normalize_suggested_tag(label: str) -> str:
+        cleaned = " ".join(label.replace("_", " ").replace("-", " ").split())
+        return cleaned.strip().lower()
+
+    @staticmethod
+    def _extract_gps_exif(exif) -> list[tuple[str, str]]:
+        gps_ifd = getattr(ExifTags, "IFD", None)
+        gps_tag_id = getattr(gps_ifd, "GPSInfo", None)
+        if gps_tag_id is None:
+            return []
+
+        try:
+            gps_info = exif.get_ifd(gps_tag_id)
+        except Exception:
+            return []
+
+        if not gps_info:
+            return []
+
+        entries: list[tuple[str, str]] = []
+        for tag_id, raw_value in sorted(gps_info.items(), key=lambda item: item[0]):
+            label = str(ExifTags.GPSTAGS.get(tag_id, f"GPS {tag_id}"))
+            formatted_value = PhotoLibrary._format_exif_value(raw_value)
+            if formatted_value:
+                entries.append((f"GPS {label}", formatted_value))
+        return entries
+
+    @staticmethod
+    def _format_exif_value(value: object) -> str:
+        if value is None:
+            return ""
+
+        if isinstance(value, bytes):
+            return "" if not value else f"{len(value)} octets"
+
+        if isinstance(value, str):
+            return " ".join(value.split())
+
+        if isinstance(value, (list, tuple)):
+            parts = [PhotoLibrary._format_exif_value(item) for item in value]
+            cleaned = [part for part in parts if part]
+            return ", ".join(cleaned)
+
+        numerator = getattr(value, "numerator", None)
+        denominator = getattr(value, "denominator", None)
+        if numerator is not None and denominator not in (None, 0):
+            if denominator == 1:
+                return str(numerator)
+            decimal = numerator / denominator
+            if abs(decimal) >= 1:
+                return f"{decimal:.2f}".rstrip("0").rstrip(".")
+            return f"{numerator}/{denominator}"
+
+        if isinstance(value, float):
+            return f"{value:.4f}".rstrip("0").rstrip(".")
+
+        return str(value)
 
     @staticmethod
     def _parse_metadata_entry(value: object) -> tuple[tuple[str, ...], bool, int]:
@@ -646,6 +841,7 @@ def image_detail(relative_path: str) -> str:
     return render_template(
         "detail.html",
         record=record,
+        exif_entries=library.get_exif_data(relative_path),
         selected_query=request.args.get("from", ""),
     )
 
@@ -744,6 +940,27 @@ def update_rotation() -> object:
         return redirect(_redirect_target())
 
     flash(f"Rotation appliquée : {rotation_turns * 90}°.", "success")
+    return redirect(_redirect_target())
+
+
+@app.post("/actions/auto-tag")
+def auto_tag_image() -> object:
+    relative_path = request.form.get("relative_path", "").strip()
+
+    try:
+        tag, confidence, suggestions, created = library.add_automatic_tag(relative_path)
+    except (ValueError, RuntimeError, FileNotFoundError) as error:
+        flash(str(error), "error")
+        return redirect(_redirect_target())
+
+    alternatives = ", ".join(name for name, _ in suggestions[1:3])
+    message = (
+        f"Tag automatique {'ajouté' if created else 'déjà présent'} : {tag} "
+        f"({confidence * 100:.0f}% de confiance)."
+    )
+    if alternatives:
+        message += f" Alternatives : {alternatives}."
+    flash(message, "success")
     return redirect(_redirect_target())
 
 
