@@ -34,6 +34,13 @@ class ImageRecord:
     directory: str
     filename: str
     tags: tuple[str, ...]
+    is_favorite: bool = False
+
+
+@dataclass(frozen=True)
+class ImageMetadata:
+    tags: tuple[str, ...] = ()
+    is_favorite: bool = False
 
 
 @dataclass(frozen=True)
@@ -120,12 +127,14 @@ class PhotoLibrary:
                 if path.suffix.lower() not in ALLOWED_EXTENSIONS:
                     continue
                 relative_path = self._normalize_relative_path(path.relative_to(self.images_root))
+                entry = metadata.get(relative_path, ImageMetadata())
                 records.append(
                     ImageRecord(
                         relative_path=relative_path,
                         directory=normalized_dir,
                         filename=filename,
-                        tags=tuple(sorted(metadata.get(relative_path, []))),
+                        tags=entry.tags,
+                        is_favorite=entry.is_favorite,
                     )
                 )
 
@@ -144,6 +153,7 @@ class PhotoLibrary:
         directory: str = "",
         tag: str = "",
         only_untagged: bool = False,
+        favorites_only: bool = False,
     ) -> list[ImageRecord]:
         normalized_directory = self._clean_directory(directory)
         normalized_tag = tag.strip().lower()
@@ -153,6 +163,8 @@ class PhotoLibrary:
             if normalized_directory and not self._is_in_directory_scope(record.relative_path, normalized_directory):
                 continue
             if only_untagged and record.tags:
+                continue
+            if favorites_only and not record.is_favorite:
                 continue
             if normalized_tag and normalized_tag not in {current.lower() for current in record.tags}:
                 continue
@@ -169,6 +181,9 @@ class PhotoLibrary:
 
     def count_untagged(self, directory: str = "") -> int:
         return sum(1 for record in self.filter_images(directory=directory) if not record.tags)
+
+    def count_favorites(self, directory: str = "") -> int:
+        return sum(1 for record in self.filter_images(directory=directory) if record.is_favorite)
 
     def ensure_variant(self, relative_path: str, variant: str, settings: VariantSettings) -> Path:
         source = self.images_root / self._clean_relative_path(relative_path)
@@ -200,10 +215,14 @@ class PhotoLibrary:
         metadata = self._load_metadata()
         updated_count = 0
         for relative_path in self._validated_existing_paths(relative_paths):
-            current_tags = set(metadata.get(relative_path, []))
+            entry = metadata.get(relative_path, ImageMetadata())
+            current_tags = set(entry.tags)
             new_tags = current_tags | tags
             if new_tags != current_tags:
-                metadata[relative_path] = sorted(new_tags)
+                metadata[relative_path] = ImageMetadata(
+                    tags=tuple(sorted(new_tags)),
+                    is_favorite=entry.is_favorite,
+                )
                 updated_count += 1
 
         if updated_count:
@@ -219,11 +238,15 @@ class PhotoLibrary:
         metadata = self._load_metadata()
         updated_count = 0
         for relative_path in self._validated_existing_paths(relative_paths):
-            current_tags = set(metadata.get(relative_path, []))
+            entry = metadata.get(relative_path, ImageMetadata())
+            current_tags = set(entry.tags)
             new_tags = current_tags - tags
             if new_tags != current_tags:
-                if new_tags:
-                    metadata[relative_path] = sorted(new_tags)
+                if new_tags or entry.is_favorite:
+                    metadata[relative_path] = ImageMetadata(
+                        tags=tuple(sorted(new_tags)),
+                        is_favorite=entry.is_favorite,
+                    )
                 else:
                     metadata.pop(relative_path, None)
                 updated_count += 1
@@ -280,6 +303,30 @@ class PhotoLibrary:
             self.invalidate_index()
         return moved
 
+    def set_favorite(self, relative_path: str, is_favorite: bool) -> bool:
+        valid_paths = self._validated_existing_paths([relative_path])
+        if not valid_paths:
+            raise ValueError("Image introuvable.")
+
+        clean_relative_path = valid_paths[0]
+        metadata = self._load_metadata()
+        entry = metadata.get(clean_relative_path, ImageMetadata())
+
+        if entry.is_favorite == is_favorite:
+            return is_favorite
+
+        if entry.tags or is_favorite:
+            metadata[clean_relative_path] = ImageMetadata(
+                tags=entry.tags,
+                is_favorite=is_favorite,
+            )
+        else:
+            metadata.pop(clean_relative_path, None)
+
+        self._save_metadata(metadata)
+        self.invalidate_index()
+        return is_favorite
+
     def import_uploaded_files(self, uploaded_files: Iterable, target_directory: str) -> int:
         clean_target_directory = self._clean_directory(target_directory)
         target_root = self.images_root / clean_target_directory
@@ -315,19 +362,25 @@ class PhotoLibrary:
     def invalidate_index(self) -> None:
         self._last_scan_at = 0.0
 
-    def _load_metadata(self) -> dict[str, list[str]]:
+    def _load_metadata(self) -> dict[str, ImageMetadata]:
         if not self.metadata_file.exists():
             return {}
         with self.metadata_file.open("r", encoding="utf-8") as handle:
             payload = json.load(handle)
-        return {
-            self._clean_relative_path(key): sorted({tag.strip() for tag in value if tag.strip()})
-            for key, value in payload.items()
-        }
+        metadata: dict[str, ImageMetadata] = {}
+        for key, value in payload.items():
+            clean_key = self._clean_relative_path(key)
+            tags, is_favorite = self._parse_metadata_entry(value)
+            metadata[clean_key] = ImageMetadata(tags=tags, is_favorite=is_favorite)
+        return metadata
 
-    def _save_metadata(self, metadata: dict[str, list[str]]) -> None:
+    def _save_metadata(self, metadata: dict[str, ImageMetadata]) -> None:
         self.metadata_file.parent.mkdir(parents=True, exist_ok=True)
-        cleaned = {key: value for key, value in sorted(metadata.items()) if value}
+        cleaned = {
+            key: self._serialize_metadata_entry(value)
+            for key, value in sorted(metadata.items())
+            if value.tags or value.is_favorite
+        }
         with self.metadata_file.open("w", encoding="utf-8") as handle:
             json.dump(cleaned, handle, indent=2, ensure_ascii=False)
 
@@ -352,6 +405,25 @@ class PhotoLibrary:
                 candidate = settings_dir / relative_variant
                 if candidate.exists():
                     candidate.unlink()
+
+    @staticmethod
+    def _parse_metadata_entry(value: object) -> tuple[tuple[str, ...], bool]:
+        if isinstance(value, dict):
+            raw_tags = value.get("tags", [])
+            raw_favorite = value.get("favorite", False)
+        else:
+            raw_tags = value
+            raw_favorite = False
+
+        tags = tuple(sorted({str(tag).strip() for tag in raw_tags if str(tag).strip()}))
+        return tags, bool(raw_favorite)
+
+    @staticmethod
+    def _serialize_metadata_entry(entry: ImageMetadata) -> dict[str, object]:
+        payload: dict[str, object] = {"tags": list(entry.tags)}
+        if entry.is_favorite:
+            payload["favorite"] = True
+        return payload
 
     @staticmethod
     def _parse_tags(raw_tags: str) -> set[str]:
@@ -444,6 +516,8 @@ def inject_helpers() -> dict[str, object]:
     return {
         "breadcrumb_parts": breadcrumb_parts,
         "directory_label": directory_label,
+        "gallery_query": gallery_query,
+        "gallery_url": gallery_url,
         "variant_settings": current_variant_settings(),
     }
 
@@ -453,6 +527,7 @@ def index() -> str:
     current_directory = request.args.get("dir", "").strip()
     tag = request.args.get("tag", "").strip()
     only_untagged = request.args.get("untagged", "") == "1"
+    favorites_only = request.args.get("favorites", "") == "1"
 
     try:
         clean_directory = library._clean_directory(current_directory)
@@ -463,6 +538,7 @@ def index() -> str:
         directory=clean_directory,
         tag=tag,
         only_untagged=only_untagged,
+        favorites_only=favorites_only,
     )
     return render_template(
         "index.html",
@@ -471,8 +547,10 @@ def index() -> str:
         current_directory=clean_directory,
         tag=tag,
         only_untagged=only_untagged,
+        favorites_only=favorites_only,
         total_images=len(library.list_images()),
         total_visible=len(records),
+        favorite_count=library.count_favorites(clean_directory),
         tag_summary=library.tag_summary(clean_directory),
         untagged_count=library.count_untagged(clean_directory),
         return_query=request.query_string.decode("utf-8"),
@@ -555,6 +633,24 @@ def update_render_settings() -> object:
     return redirect(_redirect_target())
 
 
+@app.post("/actions/favorite")
+def update_favorite() -> object:
+    relative_path = request.form.get("relative_path", "").strip()
+    mode = request.form.get("mode", "").strip()
+    if mode not in {"on", "off"}:
+        flash("Action favori inconnue.", "error")
+        return redirect(_redirect_target())
+
+    try:
+        is_favorite = library.set_favorite(relative_path, is_favorite=mode == "on")
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(_redirect_target())
+
+    flash("Image ajoutée aux favoris." if is_favorite else "Image retirée des favoris.", "success")
+    return redirect(_redirect_target())
+
+
 @app.post("/actions/create-directory")
 def create_directory() -> object:
     parent_directory = request.form.get("parent_directory", "")
@@ -620,6 +716,41 @@ def breadcrumb_parts(directory: str) -> list[tuple[str, str]]:
 
 def directory_label(directory: str) -> str:
     return directory or "Images"
+
+
+def gallery_query(
+    directory: str = "",
+    tag: str = "",
+    only_untagged: bool = False,
+    favorites_only: bool = False,
+) -> dict[str, str]:
+    query: dict[str, str] = {}
+    if directory:
+        query["dir"] = directory
+    if tag:
+        query["tag"] = tag
+    if only_untagged:
+        query["untagged"] = "1"
+    if favorites_only:
+        query["favorites"] = "1"
+    return query
+
+
+def gallery_url(
+    directory: str = "",
+    tag: str = "",
+    only_untagged: bool = False,
+    favorites_only: bool = False,
+) -> str:
+    return url_for(
+        "index",
+        **gallery_query(
+            directory=directory,
+            tag=tag,
+            only_untagged=only_untagged,
+            favorites_only=favorites_only,
+        ),
+    )
 
 
 def current_variant_settings() -> VariantSettings:

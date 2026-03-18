@@ -21,6 +21,11 @@
       <strong>{{ untagged_count }}</strong>
       <small>dans ce périmètre</small>
     </article>
+    <article class="stat-card">
+      <span>Favoris</span>
+      <strong>{{ favorite_count }}</strong>
+      <small>dans ce périmètre</small>
+    </article>
   </section>
 
   <section class="layout-grid">
@@ -30,6 +35,9 @@
       </div>
 
       <form class="stack-form" method="get" action="{{ url_for('index') }}">
+        {% if favorites_only %}
+          <input type="hidden" name="favorites" value="1" />
+        {% endif %}
         <label>
           <span>Dossier</span>
           <select name="dir">
@@ -59,13 +67,13 @@
         <div class="tree-heading">
           <h3>Arborescence</h3>
         </div>
-        <a class="tree-link {% if not current_directory %}active{% endif %}" href="{{ url_for('index') }}">
+        <a class="tree-link {% if not current_directory %}active{% endif %}" href="{{ gallery_url('', tag, only_untagged, favorites_only) }}">
           Images
         </a>
         {% for directory in directories if directory %}
           <a
             class="tree-link {% if directory == current_directory %}active{% endif %}"
-            href="{{ url_for('index', dir=directory) }}"
+            href="{{ gallery_url(directory, tag, only_untagged, favorites_only) }}"
           >
             {{ directory }}
           </a>
@@ -76,9 +84,17 @@
         <div class="tree-heading">
           <h3>Tags présents</h3>
         </div>
+        <div class="filter-tabs">
+          <a class="filter-tab {% if not favorites_only %}active{% endif %}" href="{{ gallery_url(current_directory, tag, only_untagged, False) }}">
+            Toutes
+          </a>
+          <a class="filter-tab {% if favorites_only %}active{% endif %}" href="{{ gallery_url(current_directory, tag, only_untagged, True) }}">
+            Favoris
+          </a>
+        </div>
         {% if tag_summary %}
           {% for tag_name, count in tag_summary %}
-            <a class="tag-pill {% if tag_name == tag %}active{% endif %}" href="{{ url_for('index', dir=current_directory, tag=tag_name) }}">
+            <a class="tag-pill {% if tag_name == tag %}active{% endif %}" href="{{ gallery_url(current_directory, tag_name, only_untagged, favorites_only) }}">
               {{ tag_name }} <strong>{{ count }}</strong>
             </a>
           {% endfor %}
@@ -190,6 +206,9 @@
           {% else %}
             <p class="muted">Toutes les images disponibles dans le dépôt.</p>
           {% endif %}
+          {% if favorites_only %}
+            <p class="muted">Vue filtrée sur les images marquées comme favorites.</p>
+          {% endif %}
         </div>
         <div class="selection-tools">
           <button class="button button-light" type="button" data-select-all>Tout sélectionner</button>
@@ -235,6 +254,19 @@
                   <span>Sélectionner</span>
                 </label>
 
+                <button
+                  class="favorite-button {% if record.is_favorite %}active{% endif %}"
+                  type="button"
+                  data-favorite-toggle
+                  data-relative-path="{{ record.relative_path }}"
+                  data-mode="{{ 'off' if record.is_favorite else 'on' }}"
+                  data-next="{{ request.full_path if request.query_string else request.path }}"
+                  aria-label="{% if record.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}"
+                  title="{% if record.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}"
+                >
+                  <span aria-hidden="true">♥</span>
+                </button>
+
                 <a href="{{ url_for('image_detail', relative_path=record.relative_path, from=return_query) }}" class="card-media">
                   <img
                     src="{{ url_for('image_asset', variant='thumb', relative_path=record.relative_path, render=variant_settings.thumb_cache_key) }}"
@@ -248,6 +280,9 @@
                   <small>{{ record.directory or "Images" }}</small>
 
                   <div class="tag-stack">
+                    {% if record.is_favorite %}
+                      <span class="tag-pill small favorite-pill">Favori</span>
+                    {% endif %}
                     {% if record.tags %}
                       {% for current_tag in record.tags %}
                         <span class="tag-pill small">{{ current_tag }}</span>
@@ -262,8 +297,14 @@
           </div>
         {% else %}
           <div class="empty-state">
-            <h3>Aucune image à afficher</h3>
-            <p>Utilise le bloc d'import pour choisir des images directement depuis ton PC.</p>
+            <h3>{% if favorites_only %}Aucun favori à afficher{% else %}Aucune image à afficher{% endif %}</h3>
+            <p>
+              {% if favorites_only %}
+                Clique sur le coeur d'une image pour l'ajouter à cette vue.
+              {% else %}
+                Utilise le bloc d'import pour choisir des images directement depuis ton PC.
+              {% endif %}
+            </p>
           </div>
         {% endif %}
       </form>

@@ -4,6 +4,7 @@ const selectAllButton = document.querySelector("[data-select-all]");
 const clearSelectionButton = document.querySelector("[data-clear-selection]");
 const themeToggleButton = document.querySelector("[data-theme-toggle]");
 const themeLabel = document.querySelector("[data-theme-label]");
+const favoriteButtons = Array.from(document.querySelectorAll("[data-favorite-toggle]"));
 
 function updateSelectionCount() {
   if (!selectedCount) {
@@ -58,3 +59,37 @@ if (themeToggleButton) {
     applyTheme(nextTheme);
   });
 }
+
+favoriteButtons.forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const relativePath = button.dataset.relativePath;
+    const mode = button.dataset.mode;
+    const next = button.dataset.next || "/";
+    if (!relativePath || !mode) {
+      return;
+    }
+
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/actions/favorite";
+    form.hidden = true;
+
+    [
+      ["relative_path", relativePath],
+      ["mode", mode],
+      ["next", next],
+    ].forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+  });
+});

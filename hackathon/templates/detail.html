@@ -11,12 +11,24 @@
         <h2>{{ record.filename }}</h2>
         <p class="muted">{{ record.directory or "Images" }}</p>
       </div>
-      <a
-        class="button button-light"
-        href="{{ url_for('index') }}{% if selected_query %}?{{ selected_query }}{% endif %}"
-      >
-        Retour galerie
-      </a>
+      <div class="detail-actions">
+        <button
+          class="button {% if record.is_favorite %}button-primary{% else %}button-light{% endif %}"
+          type="button"
+          data-favorite-toggle
+          data-relative-path="{{ record.relative_path }}"
+          data-mode="{{ 'off' if record.is_favorite else 'on' }}"
+          data-next="{{ request.full_path if request.query_string else request.path }}"
+        >
+          {% if record.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}
+        </button>
+        <a
+          class="button button-light"
+          href="{{ url_for('index') }}{% if selected_query %}?{{ selected_query }}{% endif %}"
+        >
+          Retour galerie
+        </a>
+      </div>
     </div>
 
     <div class="detail-layout">
@@ -54,6 +66,10 @@
           <div>
             <dt>Qualité JPEG</dt>
             <dd>{{ variant_settings.quality }}</dd>
+          </div>
+          <div>
+            <dt>Favori</dt>
+            <dd>{{ "Oui" if record.is_favorite else "Non" }}</dd>
           </div>
         </dl>
 
