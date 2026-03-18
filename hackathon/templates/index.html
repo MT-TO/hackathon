@@ -267,6 +267,19 @@
                   <span aria-hidden="true">♥</span>
                 </button>
 
+                <button
+                  class="card-delete-button"
+                  type="button"
+                  data-delete-image
+                  data-relative-path="{{ record.relative_path }}"
+                  data-filename="{{ record.filename }}"
+                  data-next="{{ request.full_path if request.query_string else request.path }}"
+                  aria-label="Supprimer l'image"
+                  title="Supprimer l'image"
+                >
+                  <span aria-hidden="true">🗑</span>
+                </button>
+
                 <a href="{{ url_for('image_detail', relative_path=record.relative_path, from=return_query) }}" class="card-media">
                   <img
                     src="{{ url_for('image_asset', variant='thumb', relative_path=record.relative_path, render=variant_settings.thumb_cache_key) }}"
@@ -291,7 +304,7 @@
                           data-relative-path="{{ record.relative_path }}"
                           data-tag="{{ current_tag }}"
                           data-next="{{ request.full_path if request.query_string else request.path }}"
-                          title="Clic droit pour retirer ce tag"
+                          title="Clic droit pour ouvrir le menu du tag"
                         >
                           {{ current_tag }}
                         </span>

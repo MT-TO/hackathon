@@ -316,6 +316,22 @@ class PhotoLibrary:
             self.invalidate_index()
         return updated_count
 
+    def delete_image(self, relative_path: str) -> str:
+        valid_paths = self._validated_existing_paths([relative_path])
+        if not valid_paths:
+            raise ValueError("Image introuvable.")
+
+        clean_relative_path = valid_paths[0]
+        source = self.images_root / clean_relative_path
+        metadata = self._load_metadata()
+
+        source.unlink()
+        metadata.pop(clean_relative_path, None)
+        self._save_metadata(metadata)
+        self._remove_cached_variants(clean_relative_path)
+        self.invalidate_index()
+        return clean_relative_path
+
     def create_directory(self, parent_directory: str, name: str) -> str:
         clean_parent = self._clean_directory(parent_directory)
         clean_name = self._sanitize_directory_name(name)
@@ -1007,6 +1023,23 @@ def remove_single_tag() -> object:
         flash(f"Tag retiré : {tag}.", "success")
     else:
         flash(f"Le tag {tag} n'était pas présent.", "error")
+    return redirect(_redirect_target())
+
+
+@app.post("/actions/delete-image")
+def delete_image() -> object:
+    relative_path = request.form.get("relative_path", "").strip()
+
+    try:
+        deleted_path = library.delete_image(relative_path)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(_redirect_target())
+    except OSError as error:
+        flash(f"Suppression impossible : {error}", "error")
+        return redirect(_redirect_target())
+
+    flash(f"Image supprimée : {Path(deleted_path).name}.", "success")
     return redirect(_redirect_target())
 
 

@@ -31,6 +31,16 @@
         >
           {% if record.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}
         </button>
+        <button
+          class="button button-danger"
+          type="button"
+          data-delete-image
+          data-relative-path="{{ record.relative_path }}"
+          data-filename="{{ record.filename }}"
+          data-next="{{ url_for('index') }}{% if selected_query %}?{{ selected_query }}{% endif %}"
+        >
+          Supprimer l'image
+        </button>
         <a
           class="button button-light"
           href="{{ url_for('index') }}{% if selected_query %}?{{ selected_query }}{% endif %}"
@@ -95,7 +105,7 @@
                 data-relative-path="{{ record.relative_path }}"
                 data-tag="{{ current_tag }}"
                 data-next="{{ request.full_path if request.query_string else request.path }}"
-                title="Clic droit pour retirer ce tag"
+                title="Clic droit pour ouvrir le menu du tag"
               >
                 {{ current_tag }}
               </span>

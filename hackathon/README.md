@@ -13,7 +13,8 @@ Solution complète du sujet `hackathon-2026.pdf` sous forme d'application web lo
 - mise en favoris avec filtre dédié
 - rotation des images par pas de 90° dans l'interface
 - tag automatique local sur une image via Vision macOS, avec priorité au sujet saillant au premier plan
-- retrait rapide d'un tag par clic droit sur la pastille
+- retrait d'un tag via menu contextuel au clic droit sur la pastille
+- suppression directe d'une image depuis la galerie ou la fiche détail
 - lecture des données EXIF sur la fiche image quand elles sont disponibles
 - création de sous-répertoires
 - déplacement d'images par lots
