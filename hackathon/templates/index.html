@@ -30,38 +30,78 @@
 
   <section class="layout-grid">
     <aside class="panel sidebar">
-      <div class="panel-head">
-        <h2>Filtres</h2>
-      </div>
+      <details
+        class="filter-drawer"
+        {% if current_directory or tag or only_untagged or favorites_only %}open{% endif %}
+      >
+        <summary class="filter-drawer-summary">
+          <div class="filter-drawer-heading">
+            <p class="section-kicker">Navigation rapide</p>
+            <h2>Filtres</h2>
+          </div>
+          <div class="filter-drawer-summary-side">
+            <span class="filter-badge">{{ total_visible }} visible{{ "s" if total_visible != 1 else "" }}</span>
+            <span class="filter-drawer-toggle" aria-hidden="true"></span>
+          </div>
+        </summary>
 
-      <form class="stack-form" method="get" action="{{ url_for('index') }}">
-        {% if favorites_only %}
-          <input type="hidden" name="favorites" value="1" />
-        {% endif %}
-        <label>
-          <span>Dossier</span>
-          <select name="dir">
-            <option value="">Images</option>
-            {% for directory in directories if directory %}
-              <option value="{{ directory }}" {% if directory == current_directory %}selected{% endif %}>
-                {{ directory }}
-              </option>
-            {% endfor %}
-          </select>
-        </label>
+        <div class="filter-drawer-content">
+          <div class="filter-current">
+            {% if current_directory %}
+              <span class="filter-chip">Dossier · {{ current_directory }}</span>
+            {% endif %}
+            {% if tag %}
+              <span class="filter-chip">Tag · {{ tag }}</span>
+            {% endif %}
+            {% if only_untagged %}
+              <span class="filter-chip">Sans tag</span>
+            {% endif %}
+            {% if favorites_only %}
+              <span class="filter-chip filter-chip-favorite">Favoris</span>
+            {% endif %}
+            {% if not current_directory and not tag and not only_untagged and not favorites_only %}
+              <span class="filter-chip filter-chip-muted">Aucun filtre actif</span>
+            {% endif %}
+          </div>
 
-        <label>
-          <span>Tag exact</span>
-          <input type="text" name="tag" value="{{ tag }}" placeholder="monument, sport, interview..." />
-        </label>
+          <form class="stack-form" method="get" action="{{ url_for('index') }}">
+            <label>
+              <span>Dossier</span>
+              <select name="dir">
+                <option value="">Images</option>
+                {% for directory in directories if directory %}
+                  <option value="{{ directory }}" {% if directory == current_directory %}selected{% endif %}>
+                    {{ directory }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
 
-        <label class="checkbox-line">
-          <input type="checkbox" name="untagged" value="1" {% if only_untagged %}checked{% endif %} />
-          <span>Afficher uniquement les images sans tag</span>
-        </label>
+            <label>
+              <span>Tag exact</span>
+              <input type="text" name="tag" value="{{ tag }}" placeholder="monument, sport, interview..." />
+            </label>
 
-        <button class="button button-primary" type="submit">Appliquer</button>
-      </form>
+            <label>
+              <span>Afficher</span>
+              <select name="favorites">
+                <option value="" {% if not favorites_only %}selected{% endif %}>Toutes les images</option>
+                <option value="1" {% if favorites_only %}selected{% endif %}>Favoris uniquement</option>
+              </select>
+            </label>
+
+            <label class="checkbox-line">
+              <input type="checkbox" name="untagged" value="1" {% if only_untagged %}checked{% endif %} />
+              <span>Afficher uniquement les images sans tag</span>
+            </label>
+
+            <div class="inline-actions filter-actions">
+              <button class="button button-primary" type="submit">Appliquer</button>
+              <a class="button button-light" href="{{ url_for('index') }}">Réinitialiser</a>
+            </div>
+          </form>
+        </div>
+      </details>
 
       <div class="directory-tree">
         <div class="tree-heading">

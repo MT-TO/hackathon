@@ -20,6 +20,9 @@
   --forest: #2b7260;
   --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
   --radius: 18px;
+  --font-body: "Avenir Next", "Segoe UI", sans-serif;
+  --font-ui: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
 :root[data-theme="light"] {
@@ -53,7 +56,10 @@ body {
     radial-gradient(circle at top left, var(--glow-left), transparent 24%),
     radial-gradient(circle at top right, var(--glow-right), transparent 30%),
     linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  text-rendering: optimizeLegibility;
   transition: background 0.2s ease, color 0.2s ease;
 }
 
@@ -100,7 +106,16 @@ code {
 .panel-head h2,
 .tree-heading h3,
 .detail-meta h3 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
+}
+
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
 }
 
 .brand-mark {
@@ -123,6 +138,16 @@ code {
   color: var(--muted);
 }
 
+.section-kicker {
+  margin: 0 0 0.28rem;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .hero-copy {
   min-width: 0;
 }
@@ -138,6 +163,7 @@ code {
   margin: 0;
   font-size: clamp(1.8rem, 4.5vw, 3.4rem);
   line-height: 0.95;
+  letter-spacing: -0.03em;
 }
 
 .hero-copy p {
@@ -234,6 +260,12 @@ code {
   padding: 1rem;
 }
 
+.sidebar {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
 .panel-head {
   display: flex;
   gap: 0.75rem;
@@ -244,7 +276,8 @@ code {
 
 .panel-head h2 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.42rem;
+  letter-spacing: -0.02em;
 }
 
 .stack-form,
@@ -261,6 +294,15 @@ label span,
 .card-check span,
 .tree-heading h3 {
   display: block;
+}
+
+label span {
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .tree-heading h3 {
@@ -281,7 +323,30 @@ select {
   color: var(--ink);
   border-radius: 12px;
   padding: 0.72rem 0.85rem;
-  font: inherit;
+  min-height: 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder {
+  color: var(--muted);
+  opacity: 0.82;
+}
+
+select {
+  appearance: none;
+  padding-right: 2.7rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.15rem) calc(50% - 0.16rem),
+    calc(100% - 0.82rem) calc(50% - 0.16rem);
+  background-size: 0.42rem 0.42rem, 0.42rem 0.42rem;
+  background-repeat: no-repeat;
 }
 
 input[type="file"] {
@@ -295,6 +360,19 @@ input[type="file"] {
   display: flex;
   gap: 0.55rem;
   align-items: center;
+  padding: 0.2rem 0;
+}
+
+.checkbox-line input {
+  flex: none;
+}
+
+.checkbox-line span {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .button {
@@ -304,8 +382,10 @@ input[type="file"] {
   padding: 0.72rem 0.95rem;
   background: var(--button-bg);
   color: var(--ink);
-  font: inherit;
   font-size: 0.92rem;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -349,10 +429,109 @@ input[type="file"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.filter-drawer {
+  position: sticky;
+  top: 1rem;
+  z-index: 10;
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.95rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel-soft), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.filter-drawer-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.filter-drawer-heading h2 {
+  margin: 0;
+}
+
+.filter-drawer-summary-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: none;
+}
+
+.filter-badge,
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.34rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.filter-badge {
+  white-space: nowrap;
+}
+
+.filter-drawer-toggle {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-right: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  transform: rotate(45deg) translateY(-0.08rem);
+  transition: transform 0.18s ease;
+}
+
+.filter-drawer[open] .filter-drawer-toggle {
+  transform: rotate(225deg) translateY(-0.08rem);
+}
+
+.filter-drawer-content {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.filter-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.filter-chip-muted {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.filter-chip-favorite {
+  color: white;
+  border-color: rgba(255, 106, 139, 0.28);
+  background: linear-gradient(135deg, rgba(255, 106, 139, 0.22), rgba(214, 63, 100, 0.18));
+}
+
 .inline-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.sidebar .filter-actions .button {
+  width: auto;
+  flex: 1 1 0;
+}
+
+.directory-tree,
+.tag-list,
+.create-folder-box {
+  padding: 0.95rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
 }
 
 .sidebar .button,
@@ -568,6 +747,8 @@ input[type="file"] {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .card-body small {
@@ -740,6 +921,10 @@ input[type="file"] {
     flex-direction: column;
     align-items: stretch;
   }
+
+  .filter-drawer {
+    top: 0.7rem;
+  }
 }
 
 @media (max-width: 720px) {
@@ -756,5 +941,17 @@ input[type="file"] {
 
   .gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  }
+
+  .filter-drawer-summary {
+    align-items: flex-start;
+  }
+
+  .filter-drawer-summary-side {
+    gap: 0.5rem;
+  }
+
+  .sidebar .filter-actions .button {
+    width: 100%;
   }
 }
