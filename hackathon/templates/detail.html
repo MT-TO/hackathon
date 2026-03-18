@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Photo Desk | {{ record.filename }}{% endblock %}
+{% block hero_title %}Aperçu image{% endblock %}
+{% block hero_text %}Cliquer sur la miniature pour ouvrir l'original UHD dans le navigateur.{% endblock %}
+
+{% block content %}
+  <section class="panel detail-panel">
+    <div class="panel-head">
+      <div>
+        <h2>{{ record.filename }}</h2>
+        <p class="muted">{{ record.directory or "Images" }}</p>
+      </div>
+      <a
+        class="button button-light"
+        href="{{ url_for('index') }}{% if selected_query %}?{{ selected_query }}{% endif %}"
+      >
+        Retour galerie
+      </a>
+    </div>
+
+    <div class="detail-layout">
+      <a class="detail-image-wrap" href="{{ url_for('original_asset', relative_path=record.relative_path) }}" target="_blank" rel="noreferrer">
+        <img
+          class="detail-image"
+          src="{{ url_for('image_asset', variant='preview', relative_path=record.relative_path) }}"
+          alt="{{ record.filename }}"
+        />
+      </a>
+
+      <aside class="detail-meta">
+        <h3>Métadonnées de tri</h3>
+        <dl>
+          <div>
+            <dt>Nom</dt>
+            <dd>{{ record.filename }}</dd>
+          </div>
+          <div>
+            <dt>Dossier</dt>
+            <dd>{{ record.directory or "Images" }}</dd>
+          </div>
+          <div>
+            <dt>Original UHD</dt>
+            <dd><a href="{{ url_for('original_asset', relative_path=record.relative_path) }}" target="_blank" rel="noreferrer">Ouvrir le fichier source</a></dd>
+          </div>
+        </dl>
+
+        <div class="tag-stack">
+          {% if record.tags %}
+            {% for current_tag in record.tags %}
+              <span class="tag-pill">{{ current_tag }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="tag-pill subtle">Sans tag</span>
+          {% endif %}
+        </div>
+
+        <p class="muted">Workflow demandé par le sujet : vignette → miniature → original.</p>
+      </aside>
+    </div>
+  </section>
+{% endblock %}

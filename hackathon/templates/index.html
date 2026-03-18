@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Photo Desk | Galerie{% endblock %}
+{% block hero_title %}Galerie de travail{% endblock %}
+{% block hero_text %}Affichage rapide sur vignettes, aperçu en miniature, puis accès à l'original UHD.{% endblock %}
+
+{% block content %}
+  <section class="stats-grid">
+    <article class="stat-card">
+      <span>Total</span>
+      <strong>{{ total_images }}</strong>
+      <small>images indexées</small>
+    </article>
+    <article class="stat-card">
+      <span>Vue courante</span>
+      <strong>{{ total_visible }}</strong>
+      <small>images visibles</small>
+    </article>
+    <article class="stat-card">
+      <span>Sans tag</span>
+      <strong>{{ untagged_count }}</strong>
+      <small>dans ce périmètre</small>
+    </article>
+  </section>
+
+  <section class="layout-grid">
+    <aside class="panel sidebar">
+      <div class="panel-head">
+        <h2>Filtres</h2>
+      </div>
+
+      <form class="stack-form" method="get" action="{{ url_for('index') }}">
+        <label>
+          <span>Dossier</span>
+          <select name="dir">
+            <option value="">Images</option>
+            {% for directory in directories if directory %}
+              <option value="{{ directory }}" {% if directory == current_directory %}selected{% endif %}>
+                {{ directory }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label>
+          <span>Tag exact</span>
+          <input type="text" name="tag" value="{{ tag }}" placeholder="monument, sport, interview..." />
+        </label>
+
+        <label class="checkbox-line">
+          <input type="checkbox" name="untagged" value="1" {% if only_untagged %}checked{% endif %} />
+          <span>Afficher uniquement les images sans tag</span>
+        </label>
+
+        <button class="button button-primary" type="submit">Appliquer</button>
+      </form>
+
+      <div class="directory-tree">
+        <div class="tree-heading">
+          <h3>Arborescence</h3>
+        </div>
+        <a class="tree-link {% if not current_directory %}active{% endif %}" href="{{ url_for('index') }}">
+          Images
+        </a>
+        {% for directory in directories if directory %}
+          <a
+            class="tree-link {% if directory == current_directory %}active{% endif %}"
+            href="{{ url_for('index', dir=directory) }}"
+          >
+            {{ directory }}
+          </a>
+        {% endfor %}
+      </div>
+
+      <div class="tag-list">
+        <div class="tree-heading">
+          <h3>Tags présents</h3>
+        </div>
+        {% if tag_summary %}
+          {% for tag_name, count in tag_summary %}
+            <a class="tag-pill {% if tag_name == tag %}active{% endif %}" href="{{ url_for('index', dir=current_directory, tag=tag_name) }}">
+              {{ tag_name }} <strong>{{ count }}</strong>
+            </a>
+          {% endfor %}
+        {% else %}
+          <p class="muted">Aucun tag pour l'instant.</p>
+        {% endif %}
+      </div>
+
+      <div class="create-folder-box">
+        <div class="tree-heading">
+          <h3>Importer depuis le PC</h3>
+        </div>
+        <form class="stack-form" method="post" action="{{ url_for('import_images') }}" enctype="multipart/form-data">
+          <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}" />
+          <label>
+            <span>Dossier de destination</span>
+            <select name="target_directory">
+              <option value="{{ current_directory }}">{{ current_directory or "Images" }}</option>
+              {% if current_directory %}
+                <option value="">Images</option>
+              {% endif %}
+              {% for directory in directories if directory and directory != current_directory %}
+                <option value="{{ directory }}">{{ directory }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="upload-dropzone">
+            <span>Choisir une ou plusieurs images</span>
+            <input type="file" name="images" accept="image/*" multiple />
+            <small>Import direct de fichiers depuis ton ordinateur.</small>
+          </label>
+          <label class="upload-dropzone">
+            <span>Ou choisir un dossier complet</span>
+            <input type="file" name="folder_images" accept="image/*" webkitdirectory directory multiple />
+            <small>Le navigateur envoie toute l'arborescence du dossier sélectionné.</small>
+          </label>
+          <button class="button button-primary" type="submit">Importer</button>
+        </form>
+      </div>
+
+      <div class="create-folder-box">
+        <div class="tree-heading">
+          <h3>Nouveau sous-dossier</h3>
+        </div>
+        <form class="stack-form" method="post" action="{{ url_for('create_directory') }}">
+          <input type="hidden" name="parent_directory" value="{{ current_directory }}" />
+          <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}" />
+          <label>
+            <span>Nom</span>
+            <input type="text" name="name" placeholder="Ex: Sélection finale" required />
+          </label>
+          <button class="button" type="submit">Créer</button>
+        </form>
+      </div>
+    </aside>
+
+    <section class="panel gallery-panel">
+      <div class="panel-head">
+        <div>
+          <h2>{{ directory_label(current_directory) }}</h2>
+          {% if current_directory %}
+            <nav class="breadcrumbs">
+              <a href="{{ url_for('index') }}">Images</a>
+              {% for label, directory in breadcrumb_parts(current_directory) %}
+                <span>/</span>
+                <a href="{{ url_for('index', dir=directory) }}">{{ label }}</a>
+              {% endfor %}
+            </nav>
+          {% else %}
+            <p class="muted">Toutes les images disponibles dans le dépôt.</p>
+          {% endif %}
+        </div>
+        <div class="selection-tools">
+          <button class="button button-light" type="button" data-select-all>Tout sélectionner</button>
+          <button class="button button-light" type="button" data-clear-selection>Tout désélectionner</button>
+        </div>
+      </div>
+
+      <form method="post" action="{{ url_for('batch_action') }}" class="gallery-form">
+        <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}" />
+
+        <div class="batch-bar">
+          <span><strong data-selected-count>0</strong> image(s) sélectionnée(s)</span>
+
+          <div class="batch-actions">
+            <label>
+              <span>Tags</span>
+              <input type="text" name="tag_value" placeholder="portrait, nuit, monument" />
+            </label>
+
+            <button class="button" type="submit" name="action" value="add_tag">Ajouter tag</button>
+            <button class="button button-light" type="submit" name="action" value="remove_tag">Retirer tag</button>
+
+            <label>
+              <span>Déplacer vers</span>
+              <select name="target_directory">
+                <option value="">Images</option>
+                {% for directory in directories if directory %}
+                  <option value="{{ directory }}">{{ directory }}</option>
+                {% endfor %}
+              </select>
+            </label>
+
+            <button class="button button-primary" type="submit" name="action" value="move">Déplacer la sélection</button>
+          </div>
+        </div>
+
+        {% if records %}
+          <div class="gallery-grid">
+            {% for record in records %}
+              <article class="image-card">
+                <label class="card-check">
+                  <input type="checkbox" name="selected" value="{{ record.relative_path }}" data-selection-checkbox />
+                  <span>Sélectionner</span>
+                </label>
+
+                <a href="{{ url_for('image_detail', relative_path=record.relative_path, from=return_query) }}" class="card-media">
+                  <img
+                    src="{{ url_for('image_asset', variant='thumb', relative_path=record.relative_path) }}"
+                    alt="{{ record.filename }}"
+                    loading="lazy"
+                  />
+                </a>
+
+                <div class="card-body">
+                  <strong title="{{ record.filename }}">{{ record.filename }}</strong>
+                  <small>{{ record.directory or "Images" }}</small>
+
+                  <div class="tag-stack">
+                    {% if record.tags %}
+                      {% for current_tag in record.tags %}
+                        <span class="tag-pill small">{{ current_tag }}</span>
+                      {% endfor %}
+                    {% else %}
+                      <span class="tag-pill subtle">Sans tag</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <h3>Aucune image à afficher</h3>
+            <p>Utilise le bloc d'import pour choisir des images directement depuis ton PC.</p>
+          </div>
+        {% endif %}
+      </form>
+    </section>
+  </section>
+{% endblock %}

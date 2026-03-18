@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Photo Desk{% endblock %}</title>
+    <script>
+      (function () {
+        const savedTheme = localStorage.getItem("photo-desk-theme");
+        const theme = savedTheme === "light" ? "light" : "dark";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="{{ url_for('index') }}">
+        <span class="brand-mark">PD</span>
+        <span>
+          <strong>Photo Desk</strong>
+          <small>Tri local pour l'agence photo</small>
+        </span>
+      </a>
+      <div class="hero-copy">
+        <div class="hero-topbar">
+          <div>
+            <h1>{% block hero_title %}Gestion de raid photo{% endblock %}</h1>
+            <p>{% block hero_text %}Miniatures, vignettes, tags et déplacements par lots sans base SQL.{% endblock %}</p>
+          </div>
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Changer de thème">
+            <span class="theme-toggle-label" data-theme-label>Mode clair</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="flash-stack">
+          {% for category, message in messages %}
+            <article class="flash flash-{{ category }}">{{ message }}</article>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+
+    <main class="page-shell">
+      {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>
