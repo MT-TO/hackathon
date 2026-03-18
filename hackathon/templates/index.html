@@ -88,7 +88,7 @@
           <a class="filter-tab {% if not favorites_only %}active{% endif %}" href="{{ gallery_url(current_directory, tag, only_untagged, False) }}">
             Toutes
           </a>
-          <a class="filter-tab {% if favorites_only %}active{% endif %}" href="{{ gallery_url(current_directory, tag, only_untagged, True) }}">
+          <a class="filter-tab filter-tab-favorite {% if favorites_only %}active{% endif %}" href="{{ gallery_url(current_directory, tag, only_untagged, True) }}">
             Favoris
           </a>
         </div>

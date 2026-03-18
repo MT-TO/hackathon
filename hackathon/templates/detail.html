@@ -12,8 +12,17 @@
         <p class="muted">{{ record.directory or "Images" }}</p>
       </div>
       <div class="detail-actions">
+        <form class="detail-inline-form" method="post" action="{{ url_for('update_rotation') }}">
+          <input type="hidden" name="relative_path" value="{{ record.relative_path }}" />
+          <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}" />
+          <div class="rotation-actions">
+            <button class="button button-light" type="submit" name="mode" value="ccw">↶ Tourner</button>
+            <button class="button button-light" type="submit" name="mode" value="cw">↷ Tourner</button>
+            <button class="button button-light" type="submit" name="mode" value="reset">Remise à zéro</button>
+          </div>
+        </form>
         <button
-          class="button {% if record.is_favorite %}button-primary{% else %}button-light{% endif %}"
+          class="button {% if record.is_favorite %}button-primary favorite-action{% else %}button-light{% endif %}"
           type="button"
           data-favorite-toggle
           data-relative-path="{{ record.relative_path }}"
@@ -68,6 +77,10 @@
             <dd>{{ variant_settings.quality }}</dd>
           </div>
           <div>
+            <dt>Rotation</dt>
+            <dd>{{ record.rotation_degrees }}°</dd>
+          </div>
+          <div>
             <dt>Favori</dt>
             <dd>{{ "Oui" if record.is_favorite else "Non" }}</dd>
           </div>
@@ -83,7 +96,7 @@
           {% endif %}
         </div>
 
-        <p class="muted">Workflow demandé par le sujet : vignette → miniature → original.</p>
+        <p class="muted">Workflow demandé par le sujet : vignette → miniature → original. La rotation n'altère pas les originaux.</p>
       </aside>
     </div>
   </section>

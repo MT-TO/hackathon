@@ -35,12 +35,22 @@ class ImageRecord:
     filename: str
     tags: tuple[str, ...]
     is_favorite: bool = False
+    rotation_turns: int = 0
+
+    @property
+    def rotation_degrees(self) -> int:
+        return self.rotation_turns * 90
 
 
 @dataclass(frozen=True)
 class ImageMetadata:
     tags: tuple[str, ...] = ()
     is_favorite: bool = False
+    rotation_turns: int = 0
+
+    @property
+    def rotation_degrees(self) -> int:
+        return self.rotation_turns * 90
 
 
 @dataclass(frozen=True)
@@ -135,6 +145,7 @@ class PhotoLibrary:
                         filename=filename,
                         tags=entry.tags,
                         is_favorite=entry.is_favorite,
+                        rotation_turns=entry.rotation_turns,
                     )
                 )
 
@@ -186,16 +197,19 @@ class PhotoLibrary:
         return sum(1 for record in self.filter_images(directory=directory) if record.is_favorite)
 
     def ensure_variant(self, relative_path: str, variant: str, settings: VariantSettings) -> Path:
-        source = self.images_root / self._clean_relative_path(relative_path)
+        clean_relative_path = self._clean_relative_path(relative_path)
+        source = self.images_root / clean_relative_path
         if not source.exists():
             raise FileNotFoundError(relative_path)
+        entry = self._load_metadata().get(clean_relative_path, ImageMetadata())
 
         target_root, size = (
             (self.previews_root, settings.preview_size)
             if variant == "preview"
             else (self.thumbs_root, settings.thumb_size)
         )
-        target = (target_root / settings.cache_key_for(variant) / self._clean_relative_path(relative_path)).with_suffix(".jpg")
+        variant_key = f"{settings.cache_key_for(variant)}_rot{entry.rotation_degrees}"
+        target = (target_root / variant_key / clean_relative_path).with_suffix(".jpg")
         target.parent.mkdir(parents=True, exist_ok=True)
 
         if target.exists() and target.stat().st_mtime_ns >= source.stat().st_mtime_ns:
@@ -203,6 +217,7 @@ class PhotoLibrary:
 
         with Image.open(source) as image:
             converted = image.convert("RGB")
+            converted = self._apply_rotation(converted, entry.rotation_turns)
             converted.thumbnail(size)
             converted.save(target, format="JPEG", quality=settings.quality, optimize=True)
         return target
@@ -222,6 +237,7 @@ class PhotoLibrary:
                 metadata[relative_path] = ImageMetadata(
                     tags=tuple(sorted(new_tags)),
                     is_favorite=entry.is_favorite,
+                    rotation_turns=entry.rotation_turns,
                 )
                 updated_count += 1
 
@@ -242,10 +258,11 @@ class PhotoLibrary:
             current_tags = set(entry.tags)
             new_tags = current_tags - tags
             if new_tags != current_tags:
-                if new_tags or entry.is_favorite:
+                if new_tags or entry.is_favorite or entry.rotation_turns:
                     metadata[relative_path] = ImageMetadata(
                         tags=tuple(sorted(new_tags)),
                         is_favorite=entry.is_favorite,
+                        rotation_turns=entry.rotation_turns,
                     )
                 else:
                     metadata.pop(relative_path, None)
@@ -315,10 +332,11 @@ class PhotoLibrary:
         if entry.is_favorite == is_favorite:
             return is_favorite
 
-        if entry.tags or is_favorite:
+        if entry.tags or is_favorite or entry.rotation_turns:
             metadata[clean_relative_path] = ImageMetadata(
                 tags=entry.tags,
                 is_favorite=is_favorite,
+                rotation_turns=entry.rotation_turns,
             )
         else:
             metadata.pop(clean_relative_path, None)
@@ -326,6 +344,42 @@ class PhotoLibrary:
         self._save_metadata(metadata)
         self.invalidate_index()
         return is_favorite
+
+    def set_rotation(self, relative_path: str, mode: str) -> int:
+        valid_paths = self._validated_existing_paths([relative_path])
+        if not valid_paths:
+            raise ValueError("Image introuvable.")
+
+        clean_relative_path = valid_paths[0]
+        metadata = self._load_metadata()
+        entry = metadata.get(clean_relative_path, ImageMetadata())
+        current_turns = entry.rotation_turns
+
+        if mode == "cw":
+            rotation_turns = (current_turns + 1) % 4
+        elif mode == "ccw":
+            rotation_turns = (current_turns - 1) % 4
+        elif mode == "reset":
+            rotation_turns = 0
+        else:
+            raise ValueError("Action rotation inconnue.")
+
+        if rotation_turns == current_turns:
+            return rotation_turns
+
+        if entry.tags or entry.is_favorite or rotation_turns:
+            metadata[clean_relative_path] = ImageMetadata(
+                tags=entry.tags,
+                is_favorite=entry.is_favorite,
+                rotation_turns=rotation_turns,
+            )
+        else:
+            metadata.pop(clean_relative_path, None)
+
+        self._save_metadata(metadata)
+        self._remove_cached_variants(clean_relative_path)
+        self.invalidate_index()
+        return rotation_turns
 
     def import_uploaded_files(self, uploaded_files: Iterable, target_directory: str) -> int:
         clean_target_directory = self._clean_directory(target_directory)
@@ -370,8 +424,12 @@ class PhotoLibrary:
         metadata: dict[str, ImageMetadata] = {}
         for key, value in payload.items():
             clean_key = self._clean_relative_path(key)
-            tags, is_favorite = self._parse_metadata_entry(value)
-            metadata[clean_key] = ImageMetadata(tags=tags, is_favorite=is_favorite)
+            tags, is_favorite, rotation_turns = self._parse_metadata_entry(value)
+            metadata[clean_key] = ImageMetadata(
+                tags=tags,
+                is_favorite=is_favorite,
+                rotation_turns=rotation_turns,
+            )
         return metadata
 
     def _save_metadata(self, metadata: dict[str, ImageMetadata]) -> None:
@@ -379,7 +437,7 @@ class PhotoLibrary:
         cleaned = {
             key: self._serialize_metadata_entry(value)
             for key, value in sorted(metadata.items())
-            if value.tags or value.is_favorite
+            if value.tags or value.is_favorite or value.rotation_turns
         }
         with self.metadata_file.open("w", encoding="utf-8") as handle:
             json.dump(cleaned, handle, indent=2, ensure_ascii=False)
@@ -407,23 +465,46 @@ class PhotoLibrary:
                     candidate.unlink()
 
     @staticmethod
-    def _parse_metadata_entry(value: object) -> tuple[tuple[str, ...], bool]:
+    def _parse_metadata_entry(value: object) -> tuple[tuple[str, ...], bool, int]:
         if isinstance(value, dict):
             raw_tags = value.get("tags", [])
             raw_favorite = value.get("favorite", False)
+            raw_rotation = value.get("rotation", 0)
         else:
             raw_tags = value
             raw_favorite = False
+            raw_rotation = 0
 
         tags = tuple(sorted({str(tag).strip() for tag in raw_tags if str(tag).strip()}))
-        return tags, bool(raw_favorite)
+        return tags, bool(raw_favorite), PhotoLibrary._normalize_rotation_turns(raw_rotation)
 
     @staticmethod
     def _serialize_metadata_entry(entry: ImageMetadata) -> dict[str, object]:
         payload: dict[str, object] = {"tags": list(entry.tags)}
         if entry.is_favorite:
             payload["favorite"] = True
+        if entry.rotation_turns:
+            payload["rotation"] = entry.rotation_turns
         return payload
+
+    @staticmethod
+    def _normalize_rotation_turns(value: object) -> int:
+        try:
+            normalized = int(value) % 4
+        except (TypeError, ValueError):
+            return 0
+        return normalized
+
+    @staticmethod
+    def _apply_rotation(image: Image.Image, rotation_turns: int) -> Image.Image:
+        turns = PhotoLibrary._normalize_rotation_turns(rotation_turns)
+        if turns == 1:
+            return image.transpose(Image.Transpose.ROTATE_270)
+        if turns == 2:
+            return image.transpose(Image.Transpose.ROTATE_180)
+        if turns == 3:
+            return image.transpose(Image.Transpose.ROTATE_90)
+        return image
 
     @staticmethod
     def _parse_tags(raw_tags: str) -> set[str]:
@@ -648,6 +729,21 @@ def update_favorite() -> object:
         return redirect(_redirect_target())
 
     flash("Image ajoutée aux favoris." if is_favorite else "Image retirée des favoris.", "success")
+    return redirect(_redirect_target())
+
+
+@app.post("/actions/rotation")
+def update_rotation() -> object:
+    relative_path = request.form.get("relative_path", "").strip()
+    mode = request.form.get("mode", "").strip()
+
+    try:
+        rotation_turns = library.set_rotation(relative_path, mode)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(_redirect_target())
+
+    flash(f"Rotation appliquée : {rotation_turns * 90}°.", "success")
     return redirect(_redirect_target())
 
 

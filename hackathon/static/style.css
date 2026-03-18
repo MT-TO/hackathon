@@ -398,6 +398,15 @@ input[type="file"] {
   background: var(--panel-soft);
 }
 
+.filter-tab-favorite {
+  border-color: rgba(255, 106, 139, 0.28);
+}
+
+.filter-tab-favorite.active {
+  color: white;
+  background: linear-gradient(135deg, #ff6a8b, #d63f64);
+}
+
 .tag-pill strong {
   font-size: 0.78rem;
 }
@@ -559,11 +568,25 @@ input[type="file"] {
   gap: 1rem;
 }
 
+.detail-inline-form {
+  margin: 0;
+}
+
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.55rem;
+}
+
+.rotation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.favorite-action.button-primary {
+  background: linear-gradient(135deg, #ff6a8b, #d63f64);
 }
 
 .detail-layout {
