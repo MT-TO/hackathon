@@ -417,6 +417,15 @@ input[type="file"] {
   padding: 0.32rem 0.56rem;
 }
 
+.removable-tag {
+  cursor: context-menu;
+  user-select: none;
+}
+
+.removable-tag:hover {
+  filter: brightness(1.08);
+}
+
 .tag-pill.subtle {
   background: var(--panel-soft);
   color: var(--muted);

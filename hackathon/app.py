@@ -258,6 +258,13 @@ class PhotoLibrary:
         updated = self.add_tags([relative_path], tag)
         return tag, confidence, suggestions, bool(updated)
 
+    def remove_tag_from_image(self, relative_path: str, tag: str) -> bool:
+        clean_relative_path = self._clean_relative_path(relative_path)
+        if not tag.strip():
+            raise ValueError("Tag invalide.")
+        updated = self.remove_tags([clean_relative_path], tag)
+        return bool(updated)
+
     def add_tags(self, relative_paths: Iterable[str], raw_tags: str) -> int:
         tags = self._parse_tags(raw_tags)
         if not tags:
@@ -548,13 +555,34 @@ guard let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {{
     exit(4)
 }}
 
-let request = VNClassifyImageRequest()
-let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-try handler.perform([request])
+func classify(_ image: CGImage) throws -> [[String: Any]] {{
+    let request = VNClassifyImageRequest()
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    try handler.perform([request])
+    return request.results?.prefix(limit).map {{ observation in
+        ["identifier": observation.identifier, "confidence": observation.confidence]
+    }} ?? []
+}}
 
-let results = request.results?.prefix(limit).map {{ observation in
-    ["identifier": observation.identifier, "confidence": observation.confidence]
-}} ?? []
+var results = try classify(cgImage)
+
+if #available(macOS 10.15, *) {{
+    let saliencyRequest = VNGenerateAttentionBasedSaliencyImageRequest()
+    let saliencyHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+    try? saliencyHandler.perform([saliencyRequest])
+    if let observation = saliencyRequest.results?.first,
+       let salientObject = observation.salientObjects?.max(by: {{ $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }}) {{
+        let imageRect = CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+        let box = VNImageRectForNormalizedRect(salientObject.boundingBox, cgImage.width, cgImage.height)
+        let expanded = box.insetBy(dx: -box.width * 0.12, dy: -box.height * 0.12).intersection(imageRect)
+        if expanded.width > 0, expanded.height > 0, let cropped = cgImage.cropping(to: expanded) {{
+            let foregroundResults = try classify(cropped)
+            if !foregroundResults.isEmpty {{
+                results = foregroundResults
+            }}
+        }}
+    }}
+}}
 
 let data = try JSONSerialization.data(withJSONObject: results, options: [])
 print(String(data: data, encoding: .utf8) ?? "[]")
@@ -961,6 +989,24 @@ def auto_tag_image() -> object:
     if alternatives:
         message += f" Alternatives : {alternatives}."
     flash(message, "success")
+    return redirect(_redirect_target())
+
+
+@app.post("/actions/remove-tag")
+def remove_single_tag() -> object:
+    relative_path = request.form.get("relative_path", "").strip()
+    tag = request.form.get("tag", "").strip()
+
+    try:
+        removed = library.remove_tag_from_image(relative_path, tag)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(_redirect_target())
+
+    if removed:
+        flash(f"Tag retiré : {tag}.", "success")
+    else:
+        flash(f"Le tag {tag} n'était pas présent.", "error")
     return redirect(_redirect_target())
 
 

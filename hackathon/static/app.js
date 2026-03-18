@@ -5,6 +5,25 @@ const clearSelectionButton = document.querySelector("[data-clear-selection]");
 const themeToggleButton = document.querySelector("[data-theme-toggle]");
 const themeLabel = document.querySelector("[data-theme-label]");
 const favoriteButtons = Array.from(document.querySelectorAll("[data-favorite-toggle]"));
+const removableTags = Array.from(document.querySelectorAll("[data-removable-tag]"));
+
+function submitHiddenForm(action, fields) {
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = action;
+  form.hidden = true;
+
+  fields.forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
 
 function updateSelectionCount() {
   if (!selectedCount) {
@@ -72,24 +91,30 @@ favoriteButtons.forEach((button) => {
       return;
     }
 
-    const form = document.createElement("form");
-    form.method = "post";
-    form.action = "/actions/favorite";
-    form.hidden = true;
-
-    [
+    submitHiddenForm("/actions/favorite", [
       ["relative_path", relativePath],
       ["mode", mode],
       ["next", next],
-    ].forEach(([name, value]) => {
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = name;
-      input.value = value;
-      form.appendChild(input);
-    });
+    ]);
+  });
+});
 
-    document.body.appendChild(form);
-    form.submit();
+removableTags.forEach((tag) => {
+  tag.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const relativePath = tag.dataset.relativePath;
+    const tagValue = tag.dataset.tag;
+    const next = tag.dataset.next || "/";
+    if (!relativePath || !tagValue) {
+      return;
+    }
+
+    submitHiddenForm("/actions/remove-tag", [
+      ["relative_path", relativePath],
+      ["tag", tagValue],
+      ["next", next],
+    ]);
   });
 });

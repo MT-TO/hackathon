@@ -285,7 +285,16 @@
                     {% endif %}
                     {% if record.tags %}
                       {% for current_tag in record.tags %}
-                        <span class="tag-pill small">{{ current_tag }}</span>
+                        <span
+                          class="tag-pill small removable-tag"
+                          data-removable-tag
+                          data-relative-path="{{ record.relative_path }}"
+                          data-tag="{{ current_tag }}"
+                          data-next="{{ request.full_path if request.query_string else request.path }}"
+                          title="Clic droit pour retirer ce tag"
+                        >
+                          {{ current_tag }}
+                        </span>
                       {% endfor %}
                     {% else %}
                       <span class="tag-pill subtle">Sans tag</span>

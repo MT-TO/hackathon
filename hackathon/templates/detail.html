@@ -89,7 +89,16 @@
         <div class="tag-stack">
           {% if record.tags %}
             {% for current_tag in record.tags %}
-              <span class="tag-pill">{{ current_tag }}</span>
+              <span
+                class="tag-pill removable-tag"
+                data-removable-tag
+                data-relative-path="{{ record.relative_path }}"
+                data-tag="{{ current_tag }}"
+                data-next="{{ request.full_path if request.query_string else request.path }}"
+                title="Clic droit pour retirer ce tag"
+              >
+                {{ current_tag }}
+              </span>
             {% endfor %}
           {% else %}
             <span class="tag-pill subtle">Sans tag</span>
@@ -104,7 +113,7 @@
       <div class="panel-head">
         <div>
           <h3>Tag automatique</h3>
-          <p class="muted">Analyse locale de l'image pour proposer un tag selon le contenu visible.</p>
+          <p class="muted">Analyse locale de l'image pour proposer un tag selon le sujet principal visible au premier plan.</p>
         </div>
         <form class="detail-inline-form" method="post" action="{{ url_for('auto_tag_image') }}">
           <input type="hidden" name="relative_path" value="{{ record.relative_path }}" />
